@@ -1,0 +1,10 @@
+generate one shadow texture from the light 
+
+use the shadowmap textures and as array and have the meshes have an id 
+
+two textures need to be rendered per fragment , one color( using the shadow see it fron the fragment pov  )  and the other distance ( try with one , and have the alpha value as the distance  )
+
+now since we have the color and distance for the fragment we can set its color
+
+now another shader with over write the array of shadowmaps , with the first pass of shadow maps, to generate color , this can oneca again be use for another pass 
+
