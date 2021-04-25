@@ -24,7 +24,11 @@ LightMapDemoScene.prototype.Load = function (cb) {
 				'Shadow_VSText': 'shaders/Shadow.vs.glsl',
 				'Shadow_FSText': 'shaders/Shadow.fs.glsl',
 				'ShadowMapGen_VSText': 'shaders/ShadowMapGen.vs.glsl',
-				'ShadowMapGen_FSText': 'shaders/ShadowMapGen.fs.glsl'
+				'ShadowMapGen_FSText': 'shaders/ShadowMapGen.fs.glsl',
+				'radiosityColorPass_1_VSText': 'shaders/radiosityColorPass_1.vs.glsl',
+				'radiosityColorPass_1_FSText': 'shaders/radiosityColorPass_1.fs.glsl',
+				'radiosityColorPass_2_VSText': 'shaders/radiosityColorPass_2.vs.glsl',
+				'radiosityColorPass_2_FSText': 'shaders/radiosityColorPass_2.fs.glsl'
 			}, LoadTextResource, callback);
 		}
 	}, function (loadErrors, loadResults) {
@@ -146,6 +150,25 @@ LightMapDemoScene.prototype.Load = function (cb) {
 			cb('ShadowMapGenProgram ' + me.ShadowMapGenProgram.error); return;
 		}
 
+		me.radiosityColorPass_1_Program = CreateShaderProgram(
+			me.gl, loadResults.ShaderCode.radiosityColorPass_1_VSText,
+			loadResults.ShaderCode.radiosityColorPass_1_FSText
+		);
+		if (me.NoShadowProgram.error) {
+			cb('NoShadowProgram ' + me.NoShadowProgram.error); return;
+		}
+
+		me.radiosityColorPass_2_Program = CreateShaderProgram(
+			me.gl, loadResults.ShaderCode.radiosityColorPass_2_VSText,
+			loadResults.ShaderCode.radiosityColorPass_2_FSText
+		);
+		if (me.NoShadowProgram.error) {
+			cb('NoShadowProgram ' + me.NoShadowProgram.error); return;
+		}
+
+		//
+		// set shaders uniforms 
+		//
 		me.NoShadowProgram.uniforms = {
 			mProj: me.gl.getUniformLocation(me.NoShadowProgram, 'mProj'),
 			mView: me.gl.getUniformLocation(me.NoShadowProgram, 'mView'),
@@ -383,7 +406,7 @@ LightMapDemoScene.prototype.Begin = function () {
 		me._Update(dt);
 		previousFrame = currentFrameTime;
 
-		me._GenerateShadowMap();
+		me._GenerateShadowMapLight();
 		me._Render();
 		me.nextFrameHandle = requestAnimationFrame(loop);
 	};
@@ -411,6 +434,51 @@ LightMapDemoScene.prototype.End = function () {
 //
 // Private Methods
 //
+
+LightMapDemoScene.prototype._Update_shadowMapCameras = function(fragPos){
+
+	this.shadowMapCameras = [
+		// Positive X
+		new Camera(
+			fragPos,
+			vec3.add(vec3.create(), fragPos, vec3.fromValues(1, 0, 0)),
+			vec3.fromValues(0, -1, 0)
+		),
+		// Negative X
+		new Camera(
+			fragPos,
+			vec3.add(vec3.create(), fragPos, vec3.fromValues(-1, 0, 0)),
+			vec3.fromValues(0, -1, 0)
+		),
+		// Positive Y
+		new Camera(
+			fragPos,
+			vec3.add(vec3.create(), fragPos, vec3.fromValues(0, 1, 0)),
+			vec3.fromValues(0, 0, 1)
+		),
+		// Negative Y
+		new Camera(
+			fragPos,
+			vec3.add(vec3.create(), fragPos, vec3.fromValues(0, -1, 0)),
+			vec3.fromValues(0, 0, -1)
+		),
+		// Positive Z
+		new Camera(
+			fragPos,
+			vec3.add(vec3.create(), fragPos, vec3.fromValues(0, 0, 1)),
+			vec3.fromValues(0, -1, 0)
+		),
+		// Negative Z
+		new Camera(
+			fragPos,
+			vec3.add(vec3.create(), fragPos, vec3.fromValues(0, 0, -1)),
+			vec3.fromValues(0, -1, 0)
+		),
+	];
+};
+
+
+
 LightMapDemoScene.prototype._Update = function (dt) {
 	mat4.rotateZ(
 		this.MonkeyMesh.world, this.MonkeyMesh.world,
@@ -461,7 +529,94 @@ LightMapDemoScene.prototype._Update = function (dt) {
 	this.camera.GetViewMatrix(this.viewMatrix);
 };
 
-LightMapDemoScene.prototype._GenerateShadowMap = function () {
+LightMapDemoScene.prototype._GenerateShadowMapLight = function () {
+	var gl = this.gl;
+
+	this._Update_shadowMapCameras(this.lightPosition);
+	// Set GL state status
+	gl.useProgram(this.ShadowMapGenProgram);
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, this.shadowMapCube);
+	gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowMapFramebuffer);
+	gl.bindRenderbuffer(gl.RENDERBUFFER, this.shadowMapRenderbuffer);
+
+	gl.viewport(0, 0, this.textureSize, this.textureSize);
+	gl.enable(gl.DEPTH_TEST);
+	gl.enable(gl.CULL_FACE);
+
+	// Set per-frame uniforms
+	gl.uniform2fv(
+		this.ShadowMapGenProgram.uniforms.shadowClipNearFar,
+		this.shadowClipNearFar
+	);
+	gl.uniform3fv(
+		this.ShadowMapGenProgram.uniforms.pointLightPosition,
+		this.lightPosition
+	);
+	gl.uniformMatrix4fv(
+		this.ShadowMapGenProgram.uniforms.mProj,
+		gl.FALSE,
+		this.shadowMapProj
+	);
+
+	for (var i = 0; i < this.shadowMapCameras.length; i++) {
+		// Set per light uniforms
+		gl.uniformMatrix4fv(
+			this.ShadowMapGenProgram.uniforms.mView,
+			gl.FALSE,
+			this.shadowMapCameras[i].GetViewMatrix(this.shadowMapViewMatrices[i])
+		);
+
+		// Set framebuffer destination
+		gl.framebufferTexture2D(
+			gl.FRAMEBUFFER,
+			gl.COLOR_ATTACHMENT0,
+			gl.TEXTURE_CUBE_MAP_POSITIVE_X + i,
+			this.shadowMapCube,
+			0
+		);
+		gl.framebufferRenderbuffer(
+			gl.FRAMEBUFFER,
+			gl.DEPTH_ATTACHMENT,
+			gl.RENDERBUFFER,
+			this.shadowMapRenderbuffer
+		);
+
+		gl.clearColor(0, 0, 0, 1);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+		// Draw meshes
+		for (var j = 0; j < this.Meshes.length; j++) {
+			// Per object uniforms
+			gl.uniformMatrix4fv(
+				this.ShadowMapGenProgram.uniforms.mWorld,
+				gl.FALSE,
+				this.Meshes[j].world
+			);
+
+			// Set attributes
+			gl.bindBuffer(gl.ARRAY_BUFFER, this.Meshes[j].vbo);
+			gl.vertexAttribPointer(
+				this.ShadowMapGenProgram.attribs.vPos,
+				3, gl.FLOAT, gl.FALSE,
+				0, 0
+			);
+			gl.enableVertexAttribArray(this.ShadowMapGenProgram.attribs.vPos);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.Meshes[j].ibo);
+			gl.drawElements(gl.TRIANGLES, this.Meshes[j].nPoints, gl.UNSIGNED_SHORT, 0);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+		}
+	}
+
+	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, null);
+};
+
+
+LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 	var gl = this.gl;
 
 	// Set GL state status
@@ -544,7 +699,9 @@ LightMapDemoScene.prototype._GenerateShadowMap = function () {
 	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 	gl.bindRenderbuffer(gl.RENDERBUFFER, null);
 	gl.bindTexture(gl.TEXTURE_CUBE_MAP, null);
-};
+}
+
+
 
 LightMapDemoScene.prototype._Render = function () {
 	var gl = this.gl;
