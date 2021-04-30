@@ -154,17 +154,17 @@ LightMapDemoScene.prototype.Load = function (cb) {
 			me.gl, loadResults.ShaderCode.radiosityColorPass_1_VSText,
 			loadResults.ShaderCode.radiosityColorPass_1_FSText
 		);
-		if (me.NoShadowProgram.error) {
-			cb('NoShadowProgram ' + me.NoShadowProgram.error); return;
+		if (me.radiosityColorPass_1_Program.error) {
+			cb('radiosityColorPass_1_Program ' + me.radiosityColorPass_1_Program.error); return;
 		}
 
-		me.radiosityColorPass_2_Program = CreateShaderProgram(
-			me.gl, loadResults.ShaderCode.radiosityColorPass_2_VSText,
-			loadResults.ShaderCode.radiosityColorPass_2_FSText
-		);
-		if (me.NoShadowProgram.error) {
-			cb('NoShadowProgram ' + me.NoShadowProgram.error); return;
-		}
+		// me.radiosityColorPass_2_Program = CreateShaderProgram(
+		// 	me.gl, loadResults.ShaderCode.radiosityColorPass_2_VSText,
+		// 	loadResults.ShaderCode.radiosityColorPass_2_FSText
+		// );
+		// if (me.radiosityColorPass_2_Program.error) {
+		// 	cb('radiosityColorPass_2_Program ' + me.radiosityColorPass_2_Program.error); return;
+		// }
 
 		//
 		// set shaders uniforms 
@@ -209,6 +209,25 @@ LightMapDemoScene.prototype.Load = function (cb) {
 		};
 		me.ShadowMapGenProgram.attribs = {
 			vPos: me.gl.getAttribLocation(me.ShadowMapGenProgram, 'vPos'),
+		};
+
+
+		me.radiosityColorPass_1_Program.uniforms = {
+			mProj: me.gl.getUniformLocation(me.radiosityColorPass_1_Program, 'mProj'),
+			mView: me.gl.getUniformLocation(me.radiosityColorPass_1_Program, 'mView'),
+			mWorld: me.gl.getUniformLocation(me.radiosityColorPass_1_Program, 'mWorld'),
+
+			pointLightPosition: me.gl.getUniformLocation(me.radiosityColorPass_1_Program, 'pointLightPosition'),
+			lightShadowMap: me.gl.getUniformLocation(me.radiosityColorPass_1_Program, 'lightShadowMap'),
+			shadowClipNearFar: me.gl.getUniformLocation(me.radiosityColorPass_1_Program, 'shadowClipNearFar'),
+
+			bias: me.gl.getUniformLocation(me.radiosityColorPass_1_Program, 'bias')
+		};
+		me.radiosityColorPass_1_Program.attribs = {
+			vPos: me.gl.getAttribLocation(me.radiosityColorPass_1_Program, 'vPos'),
+			vNorm: me.gl.getAttribLocation(me.radiosityColorPass_1_Program, 'vNorm'),
+
+			fragColor: me.gl.getAttribLocation(me.radiosityColorPass_1_Program, 'fragColor'),
 		};
 
 		//
@@ -517,6 +536,10 @@ LightMapDemoScene.prototype._Update = function (dt) {
 		this.camera.rotateRight(dt / 1000 * this.RotateSpeed);
 	}
 
+	if (this.PressedKeys.PrintInfo) {
+		console.log(this.shadowMapCube);
+	}
+
 	this.lightDisplacementInputAngle += dt / 2337;
 	var xDisplacement = Math.sin(this.lightDisplacementInputAngle) * 2.8;
 
@@ -620,7 +643,7 @@ LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 	var gl = this.gl;
 
 	// Set GL state status
-	gl.useProgram(this.ShadowMapGenProgram);
+	gl.useProgram(this.radiosityColorPass_1_Program);
 	gl.bindTexture(gl.TEXTURE_CUBE_MAP, this.shadowMapCube);
 	gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowMapFramebuffer);
 	gl.bindRenderbuffer(gl.RENDERBUFFER, this.shadowMapRenderbuffer);
@@ -629,25 +652,36 @@ LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 	gl.enable(gl.DEPTH_TEST);
 	gl.enable(gl.CULL_FACE);
 
+
+	if (this.floatExtension && this.floatLinearExtension) {
+		gl.uniform1f(this.radiosityColorPass_1_Program.uniforms.bias, 0.0001);
+	} else {
+		gl.uniform1f(this.radiosityColorPass_1_Program.uniforms.bias, 0.003);
+	}
+	gl.uniform1i(this.radiosityColorPass_1_Program.uniforms.lightShadowMap, 0);
+	gl.activeTexture(gl.TEXTURE0);
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, this.shadowMapCube);
+
 	// Set per-frame uniforms
 	gl.uniform2fv(
-		this.ShadowMapGenProgram.uniforms.shadowClipNearFar,
+		this.radiosityColorPass_1_Program.uniforms.shadowClipNearFar,
 		this.shadowClipNearFar
 	);
 	gl.uniform3fv(
-		this.ShadowMapGenProgram.uniforms.pointLightPosition,
+		this.radiosityColorPass_1_Program.uniforms.pointLightPosition,
 		this.lightPosition
 	);
 	gl.uniformMatrix4fv(
-		this.ShadowMapGenProgram.uniforms.mProj,
+		this.radiosityColorPass_1_Program.uniforms.mProj,
 		gl.FALSE,
 		this.shadowMapProj
 	);
 
-	for (var i = 0; i < this.shadowMapCameras.length; i++) {
+	for (var i = 0; i < this.shadowMapCameras.length; i++) 
+	{
 		// Set per light uniforms
 		gl.uniformMatrix4fv(
-			this.ShadowMapGenProgram.uniforms.mView,
+			this.radiosityColorPass_1_Program.uniforms.mView,
 			gl.FALSE,
 			this.shadowMapCameras[i].GetViewMatrix(this.shadowMapViewMatrices[i])
 		);
@@ -674,7 +708,7 @@ LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 		for (var j = 0; j < this.Meshes.length; j++) {
 			// Per object uniforms
 			gl.uniformMatrix4fv(
-				this.ShadowMapGenProgram.uniforms.mWorld,
+				this.radiosityColorPass_1_Program.uniforms.mWorld,
 				gl.FALSE,
 				this.Meshes[j].world
 			);
@@ -682,11 +716,19 @@ LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 			// Set attributes
 			gl.bindBuffer(gl.ARRAY_BUFFER, this.Meshes[j].vbo);
 			gl.vertexAttribPointer(
-				this.ShadowMapGenProgram.attribs.vPos,
+				this.radiosityColorPass_1_Program.attribs.vPos,
 				3, gl.FLOAT, gl.FALSE,
 				0, 0
 			);
-			gl.enableVertexAttribArray(this.ShadowMapGenProgram.attribs.vPos);
+			gl.enableVertexAttribArray(this.radiosityColorPass_1_Program.attribs.vPos);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, this.Meshes[i].nbo);
+			gl.vertexAttribPointer(
+				this.radiosityColorPass_1_Program.attribs.vNorm,
+				3, gl.FLOAT, gl.FALSE,
+				0, 0
+			);
+			gl.enableVertexAttribArray(this.radiosityColorPass_1_Program.attribs.vNorm);
 
 			gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
@@ -818,6 +860,9 @@ LightMapDemoScene.prototype._OnKeyDown = function (e) {
 		case 'ArrowLeft':
 			this.PressedKeys.RotLeft = true;
 			break;
+		case 'KeyI':
+			this.PressedKeys.PrintInfo = true;
+			break;
 	}
 };
 
@@ -846,6 +891,9 @@ LightMapDemoScene.prototype._OnKeyUp = function (e) {
 			break;
 		case 'ArrowLeft':
 			this.PressedKeys.RotLeft = false;
+			break;
+		case 'KeyI':
+			this.PressedKeys.PrintInfo = false;
 			break;
 	}
 };
