@@ -1,5 +1,6 @@
 precision mediump float;
 
+
 uniform vec3 pointLightPosition;
 uniform vec4 fragColor;
 

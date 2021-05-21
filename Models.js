@@ -4,13 +4,23 @@ var Model = function (gl, vertices, indices, normals, color) {
 	this.vbo = gl.createBuffer();
 	this.ibo = gl.createBuffer();
 	this.nbo = gl.createBuffer();
+	this.rcb = gl.createBuffer();
+	this.vertices = vertices;
+	this.indices = indices;
+	this.normals = normals;
+
 	this.nPoints = indices.length;
 
 	this.world = mat4.create();
 	this.color = color;
+	this.radiosityColor = Array.apply(null, Array(this.nPoints)).map(function () {return 0});
+	this.radiosityColor = new Float32Array(this.radiosityColor);
 
 	gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
 	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+	gl.bindBuffer(gl.ARRAY_BUFFER, this.rcb);
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.radiosityColor), gl.STATIC_DRAW);
 
 	gl.bindBuffer(gl.ARRAY_BUFFER, this.nbo);
 	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
@@ -21,6 +31,13 @@ var Model = function (gl, vertices, indices, normals, color) {
 	gl.bindBuffer(gl.ARRAY_BUFFER, null);
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 };
+
+Model.prototype.updateRCB = function(radiosityColor)
+{
+	this.radiosityColor = radiosityColor;
+	gl.bindBuffer(gl.ARRAY_BUFFER, this.rcb);
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.radiosityColor), gl.STATIC_DRAW);
+}
 
 var CreateShaderProgram = function (gl, vsText, fsText) {
 	var vs = gl.createShader(gl.VERTEX_SHADER);

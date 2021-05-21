@@ -221,13 +221,15 @@ LightMapDemoScene.prototype.Load = function (cb) {
 			lightShadowMap: me.gl.getUniformLocation(me.radiosityColorPass_1_Program, 'lightShadowMap'),
 			shadowClipNearFar: me.gl.getUniformLocation(me.radiosityColorPass_1_Program, 'shadowClipNearFar'),
 
-			bias: me.gl.getUniformLocation(me.radiosityColorPass_1_Program, 'bias')
+			bias: me.gl.getUniformLocation(me.radiosityColorPass_1_Program, 'bias'),
+			fragColor: me.gl.getUniformLocation(me.radiosityColorPass_1_Program, 'fragColor'),
 		};
 		me.radiosityColorPass_1_Program.attribs = {
 			vPos: me.gl.getAttribLocation(me.radiosityColorPass_1_Program, 'vPos'),
 			vNorm: me.gl.getAttribLocation(me.radiosityColorPass_1_Program, 'vNorm'),
 
-			fragColor: me.gl.getAttribLocation(me.radiosityColorPass_1_Program, 'fragColor'),
+			radiosityColor : me.gl.getAttribLocation(me.radiosityColorPass_1_Program, 'radiosityColor'),
+
 		};
 
 		//
@@ -274,6 +276,24 @@ LightMapDemoScene.prototype.Load = function (cb) {
 		);
 
 		me.gl.bindTexture(me.gl.TEXTURE_CUBE_MAP, null);
+		me.gl.bindRenderbuffer(me.gl.RENDERBUFFER, null);
+		me.gl.bindFramebuffer(me.gl.FRAMEBUFFER, null);
+
+
+
+		me.intermediateTexture = me.gl.createTexture();
+		me.gl.bindTexture(me.gl.TEXTURE_2D, me.intermediateTexture);
+		me.RadiosityFramebuffer = me.gl.createFramebuffer();
+		me.gl.bindFramebuffer(me.gl.FRAMEBUFFER, me.RadiosityFramebuffer);
+
+		me.RadiosityRenderbuffer = me.gl.createRenderbuffer();
+		me.gl.bindRenderbuffer(me.gl.RENDERBUFFER, me.RadiosityRenderbuffer);
+		me.gl.renderbufferStorage(
+			me.gl.RENDERBUFFER, me.gl.DEPTH_COMPONENT16,
+			me.textureSize, me.textureSize
+		);
+
+		me.gl.bindTexture(me.gl.TEXTURE_2D, null);
 		me.gl.bindRenderbuffer(me.gl.RENDERBUFFER, null);
 		me.gl.bindFramebuffer(me.gl.FRAMEBUFFER, null);
 
@@ -374,6 +394,32 @@ LightMapDemoScene.prototype.Load = function (cb) {
 
 	me.lightDisplacementInputAngle = 0.0;
 };
+
+
+LightMapDemoScene.prototype._getcolor = function() {
+	var image = new Image();
+	image.onload = function() {
+		this.gl.bindTexture(this.gl.TEXTURE_2D, this.intermediateTexture);
+		this.gl.texImage2D(this.gl.TEXTURE_2D, 0, gl.RGBA,
+					  this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
+		}
+	var canvasColor = document.createElement('canvas');
+	var contextcolor = canvasColor.getContext('2d');
+	contextcolor.drawImage(image, 0, 0);
+	var color = 0;
+	var x,y,count;
+	for(x=0; x< canvasColor.width; x++)
+	{
+		for (y =0 ; canvasColor.height; y++)
+		{
+			count = count ++;
+			color = color + contextcolor.getImageData(x,y,1,1).data;
+		}
+	}
+
+	return color/count;
+
+  }
 
 LightMapDemoScene.prototype.Unload = function () {
 	this.LightMesh = null;
@@ -537,7 +583,8 @@ LightMapDemoScene.prototype._Update = function (dt) {
 	}
 
 	if (this.PressedKeys.PrintInfo) {
-		console.log(this.shadowMapCube);
+
+		console.log(this._getcolor());
 	}
 
 	this.lightDisplacementInputAngle += dt / 2337;
@@ -644,9 +691,9 @@ LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 
 	// Set GL state status
 	gl.useProgram(this.radiosityColorPass_1_Program);
-	gl.bindTexture(gl.TEXTURE_CUBE_MAP, this.shadowMapCube);
-	gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowMapFramebuffer);
-	gl.bindRenderbuffer(gl.RENDERBUFFER, this.shadowMapRenderbuffer);
+	gl.bindTexture(gl.TEXTURE_2D, this.intermediateTexture);
+	gl.bindFramebuffer(gl.FRAMEBUFFER, this.RadiosityFramebuffer);
+	gl.bindRenderbuffer(gl.RENDERBUFFER, this.RadiosityRenderbuffer);
 
 	gl.viewport(0, 0, this.textureSize, this.textureSize);
 	gl.enable(gl.DEPTH_TEST);
@@ -663,6 +710,7 @@ LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 	gl.bindTexture(gl.TEXTURE_CUBE_MAP, this.shadowMapCube);
 
 	// Set per-frame uniforms
+
 	gl.uniform2fv(
 		this.radiosityColorPass_1_Program.uniforms.shadowClipNearFar,
 		this.shadowClipNearFar
@@ -676,65 +724,91 @@ LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 		gl.FALSE,
 		this.shadowMapProj
 	);
-
-	for (var i = 0; i < this.shadowMapCameras.length; i++) 
+	for(var k = 0; k < this.Meshes.length; k++ ) // all the fragments in all the meshes , ie all the vertex 
 	{
-		// Set per light uniforms
-		gl.uniformMatrix4fv(
-			this.radiosityColorPass_1_Program.uniforms.mView,
-			gl.FALSE,
-			this.shadowMapCameras[i].GetViewMatrix(this.shadowMapViewMatrices[i])
-		);
+		// generate camers for all the frag pos 
+		radiosityColorMesh = [] // size of vertex 
 
-		// Set framebuffer destination
-		gl.framebufferTexture2D(
-			gl.FRAMEBUFFER,
-			gl.COLOR_ATTACHMENT0,
-			gl.TEXTURE_CUBE_MAP_POSITIVE_X + i,
-			this.shadowMapCube,
-			0
-		);
-		gl.framebufferRenderbuffer(
-			gl.FRAMEBUFFER,
-			gl.DEPTH_ATTACHMENT,
-			gl.RENDERBUFFER,
-			this.shadowMapRenderbuffer
-		);
+		for (var i = 0; i < this.Meshes[k].indices.length; i++) 
+		{
+			this.genereateCamera(this.Meshes[k].vertices[this.Meshes[k].indices[i]],this.Meshes[k].normals[this.Meshes[k].indices[i]] );
 
-		gl.clearColor(0, 0, 0, 1);
-		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-		// Draw meshes
-		for (var j = 0; j < this.Meshes.length; j++) {
-			// Per object uniforms
+			// Set per light uniforms
 			gl.uniformMatrix4fv(
-				this.radiosityColorPass_1_Program.uniforms.mWorld,
+				this.radiosityColorPass_1_Program.uniforms.mView,
 				gl.FALSE,
-				this.Meshes[j].world
+				this.radiosityCamera.GetViewMatrix(this.radiosityViewMatrices)
 			);
 
-			// Set attributes
-			gl.bindBuffer(gl.ARRAY_BUFFER, this.Meshes[j].vbo);
-			gl.vertexAttribPointer(
-				this.radiosityColorPass_1_Program.attribs.vPos,
-				3, gl.FLOAT, gl.FALSE,
-				0, 0
+			// Set framebuffer destination
+			gl.framebufferTexture2D(
+				gl.FRAMEBUFFER,
+				gl.COLOR_ATTACHMENT0,
+				gl.TEXTURE_2D,
+				this.intermediateTexture,
+				0
 			);
-			gl.enableVertexAttribArray(this.radiosityColorPass_1_Program.attribs.vPos);
-
-			gl.bindBuffer(gl.ARRAY_BUFFER, this.Meshes[i].nbo);
-			gl.vertexAttribPointer(
-				this.radiosityColorPass_1_Program.attribs.vNorm,
-				3, gl.FLOAT, gl.FALSE,
-				0, 0
+			gl.framebufferRenderbuffer(
+				gl.FRAMEBUFFER,
+				gl.DEPTH_ATTACHMENT,
+				gl.RENDERBUFFER,
+				this.RadiosityRenderbuffer
 			);
-			gl.enableVertexAttribArray(this.radiosityColorPass_1_Program.attribs.vNorm);
 
-			gl.bindBuffer(gl.ARRAY_BUFFER, null);
+			gl.clearColor(0, 0, 0, 1);
+			gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.Meshes[j].ibo);
-			gl.drawElements(gl.TRIANGLES, this.Meshes[j].nPoints, gl.UNSIGNED_SHORT, 0);
-			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+			// Draw meshes
+			for (var j = 0; j < this.Meshes.length; j++) 
+			{
+				// Per object uniforms
+				gl.uniformMatrix4fv(
+					this.radiosityColorPass_1_Program.uniforms.mWorld,
+					gl.FALSE,
+					this.Meshes[j].world
+				);
+				gl.uniform4fv(
+					this.radiosityColorPass_1_Program.uniforms.fragColor,
+					this.Meshes[i].color
+				);
+
+				// Set attributes
+				gl.bindBuffer(gl.ARRAY_BUFFER, this.Meshes[j].vbo);
+				gl.vertexAttribPointer(
+					this.radiosityColorPass_1_Program.attribs.vPos,
+					3, gl.FLOAT, gl.FALSE,
+					0, 0
+				);
+				gl.enableVertexAttribArray(this.radiosityColorPass_1_Program.attribs.vPos);
+
+				gl.bindBuffer(gl.ARRAY_BUFFER, this.Meshes[i].nbo);
+				gl.vertexAttribPointer(
+					this.radiosityColorPass_1_Program.attribs.vNorm,
+					3, gl.FLOAT, gl.FALSE,
+					0, 0
+				);
+				gl.enableVertexAttribArray(this.radiosityColorPass_1_Program.attribs.vNorm);
+
+
+
+				gl.bindBuffer(gl.ARRAY_BUFFER, this.Meshes[j].rcb);
+				gl.vertexAttribPointer(
+					this.radiosityColorPass_1_Program.attribs.radiosityColor,
+					3, gl.FLOAT, gl.FALSE,
+					0, 0
+				);
+				gl.enableVertexAttribArray(this.radiosityColorPass_1_Program.attribs.radiosityColor);
+
+
+
+				gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.Meshes[j].ibo);
+				gl.drawElements(gl.TRIANGLES, this.Meshes[j].nPoints, gl.UNSIGNED_SHORT, 0);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+			}
+			radiosityColorMesh = this.updateColor(radiosityColorMesh, this.Meshes[k].indices[i]);
+			this.Meshes[k].radiosityColor = radiosityColorMesh;
 		}
 	}
 

@@ -6,6 +6,7 @@ uniform mat4 mWorld;
 
 attribute vec3 vPos;
 attribute vec3 vNorm;
+attribute vec3 radiosityColor;
 
 varying vec3 fPos;
 varying vec3 fNorm;
