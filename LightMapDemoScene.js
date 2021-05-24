@@ -11,6 +11,9 @@ LightMapDemoScene.prototype.Load = function (cb) {
 
 	var me = this;
 
+	this.canvasImage = document.getElementById('imageE');
+	// this.context = canvasImage.getContext('2d');
+
 	async.parallel({
 		Models: function (callback) {
 			async.map({
@@ -197,6 +200,8 @@ LightMapDemoScene.prototype.Load = function (cb) {
 		me.ShadowProgram.attribs = {
 			vPos: me.gl.getAttribLocation(me.ShadowProgram, 'vPos'),
 			vNorm: me.gl.getAttribLocation(me.ShadowProgram, 'vNorm'),
+
+			radiosityColor : me.gl.getAttribLocation(me.ShadowProgram, 'radiosityColor'),
 		};
 
 		me.ShadowMapGenProgram.uniforms = {
@@ -466,12 +471,13 @@ LightMapDemoScene.prototype.Begin = function () {
 	// Render Loop
 	var previousFrame = performance.now();
 	var dt = 0;
+	me._GenerateShadowMapLight();
 	var loop = function (currentFrameTime) {
 		dt = currentFrameTime - previousFrame;
 		me._Update(dt);
 		previousFrame = currentFrameTime;
 
-		me._GenerateShadowMapLight();
+		me._GenerateShadowMapFragment();
 		me._Render();
 		me.nextFrameHandle = requestAnimationFrame(loop);
 	};
@@ -545,10 +551,10 @@ LightMapDemoScene.prototype._Update_shadowMapCameras = function(fragPos){
 
 
 LightMapDemoScene.prototype._Update = function (dt) {
-	mat4.rotateZ(
-		this.MonkeyMesh.world, this.MonkeyMesh.world,
-		dt / 1000 * 2 * Math.PI *    0.3
-	);
+	// mat4.rotateZ(
+	// 	this.MonkeyMesh.world, this.MonkeyMesh.world,
+	// 	dt / 1000 * 2 * Math.PI *    0.3
+	// );
 
 	if (this.PressedKeys.Forward && !this.PressedKeys.Back) {
 		this.camera.moveForward(dt / 1000 * this.MoveForwardSpeed);
@@ -584,17 +590,17 @@ LightMapDemoScene.prototype._Update = function (dt) {
 
 	if (this.PressedKeys.PrintInfo) {
 
-		console.log(this._getcolor());
+		console.log(this.intermediateTexture);
 	}
 
-	this.lightDisplacementInputAngle += dt / 2337;
-	var xDisplacement = Math.sin(this.lightDisplacementInputAngle) * 2.8;
+	// this.lightDisplacementInputAngle += dt / 2337;
+	// var xDisplacement = Math.sin(this.lightDisplacementInputAngle) * 2.8;
 
-	this.LightMesh.world[12] = xDisplacement;
-	for (var i = 0; i < this.shadowMapCameras.length; i++) {
-		mat4.getTranslation(this.shadowMapCameras[i].position, this.LightMesh.world);
-		this.shadowMapCameras[i].GetViewMatrix(this.shadowMapViewMatrices[i]);
-	}
+	// this.LightMesh.world[12] = xDisplacement;
+	// for (var i = 0; i < this.shadowMapCameras.length; i++) {
+	// 	mat4.getTranslation(this.shadowMapCameras[i].position, this.LightMesh.world);
+	// 	this.shadowMapCameras[i].GetViewMatrix(this.shadowMapViewMatrices[i]);
+	// }
 
 	this.camera.GetViewMatrix(this.viewMatrix);
 };
@@ -685,6 +691,81 @@ LightMapDemoScene.prototype._GenerateShadowMapLight = function () {
 	gl.bindTexture(gl.TEXTURE_CUBE_MAP, null);
 };
 
+LightMapDemoScene.prototype._exract_radiosity_color = function (){
+
+	// {
+	// 	var img = new Image();
+
+		
+	// 	this.context.drawImage(img, 0, 0);
+	// 	this.context.getImageData(x, y, 1, 1).data;
+	// }
+
+	return vec3.fromValues(0,0,0);
+
+}
+
+LightMapDemoScene.prototype._genereteCamera = function (vertex , normal){
+
+var axis, up,temp;
+var max =0;
+
+max = vec3.dot(normal, vec3.fromValues(1, 0, 0));
+axis = vec3.fromValues(1, 0, 0);
+up = vec3.fromValues(0, -1, 0);
+
+temp = vec3.dot(normal, vec3.fromValues(-1, 0, 0));
+if(max < temp)
+{
+	axis = vec3.fromValues(-1, 0, 0);
+	up = vec3.fromValues(0, -1, 0);
+}
+temp = vec3.dot(normal, vec3.fromValues(0, 1, 0));
+if(max < temp)
+{
+	axis = vec3.fromValues(0, 1, 0);
+	up = vec3.fromValues(0, 0, 1);
+}
+temp = vec3.dot(normal, vec3.fromValues(0, -1, 0));
+if(max < temp)
+{
+	axis = vec3.fromValues(0, -1, 0);
+	up = vec3.fromValues(0, 0, -1);
+}
+
+temp = vec3.dot(normal, vec3.fromValues(0, 0, 1));
+if(max < temp)
+{
+	axis = vec3.fromValues(0, 0, 1);
+	up = vec3.fromValues(0, -1, 0);
+}
+temp = vec3.dot(normal, vec3.fromValues(0, 0, -1));
+if(max < temp)
+{
+	axis = vec3.fromValues(0, 0, -1);
+	up = vec3.fromValues(0, -1, 0);
+}
+
+	var camera = new Camera(vertex,vec3.add(vec3.create(), vertex, axis),up);
+
+	return camera;
+
+}
+
+
+LightMapDemoScene.prototype._updateColor = function (list_color, index_to_update_at){
+
+	// extract color from intermideate texture 
+	var color = this._exract_radiosity_color();
+
+	list_color[3*index_to_update_at] = color[0];
+	list_color[3*index_to_update_at+1] = color[1];
+	list_color[3*index_to_update_at+2] = color[2];
+	
+	return list_color;
+
+}
+
 
 LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 	var gl = this.gl;
@@ -699,7 +780,7 @@ LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 	gl.enable(gl.DEPTH_TEST);
 	gl.enable(gl.CULL_FACE);
 
-
+	var radiosityColorMesh;
 	if (this.floatExtension && this.floatLinearExtension) {
 		gl.uniform1f(this.radiosityColorPass_1_Program.uniforms.bias, 0.0001);
 	} else {
@@ -727,18 +808,29 @@ LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 	for(var k = 0; k < this.Meshes.length; k++ ) // all the fragments in all the meshes , ie all the vertex 
 	{
 		// generate camers for all the frag pos 
-		radiosityColorMesh = [] // size of vertex 
+		radiosityColorMesh = [] //  initilize to size of vertex in mesh[k] 
 
-		for (var i = 0; i < this.Meshes[k].indices.length; i++) 
+		for (var i = 0; i < this.Meshes[k].vertices.length; i++) 
 		{
-			this.genereateCamera(this.Meshes[k].vertices[this.Meshes[k].indices[i]],this.Meshes[k].normals[this.Meshes[k].indices[i]] );
-
-			// Set per light uniforms
+			var camera = this._genereteCamera(vec3.fromValues( this.Meshes[k].vertices[3*i],
+				this.Meshes[k].vertices[3*i +1],
+				this.Meshes[k].vertices[3*i +2]),
+				vec3.fromValues( this.Meshes[k].normals[3*i],
+				this.Meshes[k].normals[3*i +1],
+				this.Meshes[k].normals[3*i +2]) 
+			); // calculate camera from one vertex and normal 
+			
 			gl.uniformMatrix4fv(
 				this.radiosityColorPass_1_Program.uniforms.mView,
 				gl.FALSE,
-				this.radiosityCamera.GetViewMatrix(this.radiosityViewMatrices)
+				camera.GetViewMatrix(mat4.create())
 			);
+			// Set per light uniforms
+			// gl.uniformMatrix4fv(
+			// 	this.radiosityColorPass_1_Program.uniforms.mView,
+			// 	gl.FALSE,
+			// 	this.radiosityCamera.GetViewMatrix(this.radiosityViewMatrices)
+			// );
 
 			// Set framebuffer destination
 			gl.framebufferTexture2D(
@@ -769,7 +861,7 @@ LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 				);
 				gl.uniform4fv(
 					this.radiosityColorPass_1_Program.uniforms.fragColor,
-					this.Meshes[i].color
+					this.Meshes[j].color
 				);
 
 				// Set attributes
@@ -781,7 +873,7 @@ LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 				);
 				gl.enableVertexAttribArray(this.radiosityColorPass_1_Program.attribs.vPos);
 
-				gl.bindBuffer(gl.ARRAY_BUFFER, this.Meshes[i].nbo);
+				gl.bindBuffer(gl.ARRAY_BUFFER, this.Meshes[j].nbo);
 				gl.vertexAttribPointer(
 					this.radiosityColorPass_1_Program.attribs.vNorm,
 					3, gl.FLOAT, gl.FALSE,
@@ -807,14 +899,14 @@ LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 				gl.drawElements(gl.TRIANGLES, this.Meshes[j].nPoints, gl.UNSIGNED_SHORT, 0);
 				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 			}
-			radiosityColorMesh = this.updateColor(radiosityColorMesh, this.Meshes[k].indices[i]);
+			radiosityColorMesh = this._updateColor(radiosityColorMesh, i); // update the color value at the value of index 
 			this.Meshes[k].radiosityColor = radiosityColorMesh;
 		}
 	}
 
 	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 	gl.bindRenderbuffer(gl.RENDERBUFFER, null);
-	gl.bindTexture(gl.TEXTURE_CUBE_MAP, null);
+	gl.bindTexture(gl.TEXTURE_2D, null);
 }
 
 
@@ -873,7 +965,15 @@ LightMapDemoScene.prototype._Render = function () {
 			3, gl.FLOAT, gl.FALSE,
 			0, 0
 		);
-		gl.enableVertexAttribArray(this.ShadowProgram.attribs.vNorm);		
+		gl.enableVertexAttribArray(this.ShadowProgram.attribs.vNorm);
+
+		gl.bindBuffer(gl.ARRAY_BUFFER, this.Meshes[i].rcb);
+		gl.vertexAttribPointer(
+			this.ShadowProgram.attribs.radiosityColor,
+			3, gl.FLOAT, gl.FALSE,
+			0, 0
+		);
+		gl.enableVertexAttribArray(this.ShadowProgram.attribs.radiosityColor);		
 
 		gl.bindBuffer(gl.ARRAY_BUFFER, null);
 

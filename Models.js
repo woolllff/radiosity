@@ -13,8 +13,13 @@ var Model = function (gl, vertices, indices, normals, color) {
 
 	this.world = mat4.create();
 	this.color = color;
-	this.radiosityColor = Array.apply(null, Array(this.nPoints)).map(function () {return 0});
-	this.radiosityColor = new Float32Array(this.radiosityColor);
+	this.radiosityColor = [];
+	var i;
+	
+	for(i =0; i< this.vertices.length;i++)
+	{
+		this.radiosityColor.push(0);
+	}
 
 	gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
 	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
@@ -35,6 +40,7 @@ var Model = function (gl, vertices, indices, normals, color) {
 Model.prototype.updateRCB = function(radiosityColor)
 {
 	this.radiosityColor = radiosityColor;
+	this.rcb = gl.createBuffer();
 	gl.bindBuffer(gl.ARRAY_BUFFER, this.rcb);
 	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.radiosityColor), gl.STATIC_DRAW);
 }

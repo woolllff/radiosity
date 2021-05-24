@@ -11,6 +11,8 @@ uniform float bias;
 
 varying vec3 fPos;
 varying vec3 fNorm;
+varying vec3 rColor;
+
 
 void main()
 {
@@ -27,5 +29,5 @@ void main()
 		lightIntensity += max(dot(fNorm, toLightNormal), 0.0);
 	}
 
-	gl_FragColor = vec4(fragColor.rgb * lightIntensity, fromLightToFrag);
+	gl_FragColor = vec4(fragColor.rgb * lightIntensity + 0.01 * rColor, 1);
 }
