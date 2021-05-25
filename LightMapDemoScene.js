@@ -2,8 +2,9 @@
 
 // Array flattening trick from http://stackoverflow.com/questions/10865025/merge-flatten-a-multidimensional-array-in-javascript
 
-var LightMapDemoScene = function (gl) {
+var LightMapDemoScene = function (gl,context) {
 	this.gl = gl;
+	this.context = context;
 };
 
 LightMapDemoScene.prototype.Load = function (cb) {
@@ -11,8 +12,7 @@ LightMapDemoScene.prototype.Load = function (cb) {
 
 	var me = this;
 
-	this.canvasImage = document.getElementById('imageE');
-	// this.context = canvasImage.getContext('2d');
+
 
 	async.parallel({
 		Models: function (callback) {
@@ -591,6 +591,7 @@ LightMapDemoScene.prototype._Update = function (dt) {
 	if (this.PressedKeys.PrintInfo) {
 
 		console.log(this.intermediateTexture);
+		console.log(this.imgdata);
 	}
 
 	// this.lightDisplacementInputAngle += dt / 2337;
@@ -693,15 +694,27 @@ LightMapDemoScene.prototype._GenerateShadowMapLight = function () {
 
 LightMapDemoScene.prototype._exract_radiosity_color = function (){
 
-	// {
-	// 	var img = new Image();
 
-		
-	// 	this.context.drawImage(img, 0, 0);
-	// 	this.context.getImageData(x, y, 1, 1).data;
-	// }
+this.gl.framebufferTexture2D(this.gl.FRAMEBUFFER, this.gl.COLOR_ATTACHMENT0, this.gl.TEXTURE_2D, this.intermediateTexture, 0);
 
-	return vec3.fromValues(0,0,0);
+// Read the contents of the framebuffer
+var data = new Uint8Array(this.textureSize * this.textureSize * 4);
+this.gl.readPixels(0, 0, this.textureSize, this.textureSize, this.gl.RGBA, this.gl.UNSIGNED_BYTE, data);
+
+// Copy the pixels to a 2D canvas
+var imageData = this.context.createImageData(this.textureSize, this.textureSize);
+imageData.data.set(data);
+// this.context.putImageData(imageData, 0, 0);
+
+this.imgdata = imageData;
+var i;
+var r=0,g=0,b=0;
+for (i = 0; i < this.imgdata.data.length; i += 4) {
+	r += this.imgdata.data[i + 0];
+	g += this.imgdata.data[i + 1];
+	b += this.imgdata.data[i + 2];
+}
+return vec3.fromValues(r*4/this.imgdata.data.length,r*4/this.imgdata.data.length,r*4/this.imgdata.data.length);
 
 }
 
@@ -904,6 +917,10 @@ LightMapDemoScene.prototype._GenerateShadowMapFragment = function () {
 		}
 	}
 
+	for(var k = 0; k < this.Meshes.length; k++ )
+	{
+		this.Meshes[k].updateRCB(this.gl);
+	}
 	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 	gl.bindRenderbuffer(gl.RENDERBUFFER, null);
 	gl.bindTexture(gl.TEXTURE_2D, null);

@@ -14,7 +14,10 @@ function Init() {
 		return;
 	}
 
-	Demo = new LightMapDemoScene(gl);
+	var canvasImage = document.getElementById('imageE');
+	var context = canvasImage.getContext('2d');
+
+	Demo = new LightMapDemoScene(gl,context);
 	Demo.Load(function (demoLoadError) {
 		if (demoLoadError) {
 			alert('Could not load the demo - see console for more details');

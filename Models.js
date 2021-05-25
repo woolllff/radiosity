@@ -37,9 +37,8 @@ var Model = function (gl, vertices, indices, normals, color) {
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 };
 
-Model.prototype.updateRCB = function(radiosityColor)
+Model.prototype.updateRCB = function(gl)
 {
-	this.radiosityColor = radiosityColor;
 	this.rcb = gl.createBuffer();
 	gl.bindBuffer(gl.ARRAY_BUFFER, this.rcb);
 	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.radiosityColor), gl.STATIC_DRAW);
